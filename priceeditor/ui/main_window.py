@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -71,6 +73,8 @@ class MainWindow(QMainWindow):
         self.table.setColumnWidth(COL_NAME, 260)
         self.table.setColumnWidth(COL_TIPO_COBRO, 220)
         self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._on_table_context_menu)
         layout.addWidget(self.table)
 
         self.header_check_all = QCheckBox(self.table.horizontalHeader())
@@ -311,9 +315,7 @@ class MainWindow(QMainWindow):
 
             contado, cuota, _n = compute_prices(product, self.settings)
             contado_item = QTableWidgetItem(fmt_ars(contado))
-            if product.override_contado_ars is not None:
-                contado_item.setBackground(Qt.yellow)
-                contado_item.setForeground(Qt.black)
+            self._style_contado_item(contado_item, product, contado)
             self.table.setItem(row_idx, COL_CONTADO, contado_item)
 
             cuota_item = QTableWidgetItem(fmt_ars(cuota))
@@ -359,12 +361,7 @@ class MainWindow(QMainWindow):
 
             contado_item = self.table.item(row_idx, COL_CONTADO)
             contado_item.setText(fmt_ars(contado))
-            if product.override_contado_ars is not None:
-                contado_item.setBackground(Qt.yellow)
-                contado_item.setForeground(Qt.black)
-            else:
-                contado_item.setBackground(Qt.white)
-                contado_item.setForeground(Qt.black)
+            self._style_contado_item(contado_item, product, contado)
 
             cuota_item = self.table.item(row_idx, COL_CUOTA)
             cuota_item.setText(fmt_ars(cuota))
@@ -420,6 +417,44 @@ class MainWindow(QMainWindow):
                 pass
 
         self._update_price_columns()
+
+    def _style_contado_item(self, item: QTableWidgetItem, product: Product, contado: int) -> None:
+        cost = product.usd_price * self.settings.exchange_rate
+        if contado < cost:
+            item.setBackground(QColor("#ff6b6b"))
+            item.setForeground(Qt.black)
+            item.setToolTip("Precio contado por debajo del costo (USD x cotizacion).")
+        elif product.override_contado_ars is not None:
+            item.setBackground(Qt.yellow)
+            item.setForeground(Qt.black)
+            item.setToolTip("")
+        else:
+            item.setBackground(Qt.white)
+            item.setForeground(Qt.black)
+            item.setToolTip("")
+
+    def _on_table_context_menu(self, pos) -> None:
+        item = self.table.itemAt(pos)
+        if item is None:
+            return
+        col = item.column()
+        if col not in (COL_CONTADO, COL_CUOTA):
+            return
+        row = item.row()
+        visible = self._visible_products()
+        if row >= len(visible):
+            return
+        product = visible[row]
+        attr = "override_contado_ars" if col == COL_CONTADO else "override_cuota_ars"
+        if getattr(product, attr) is None:
+            return
+
+        menu = QMenu(self)
+        action = menu.addAction("Recalcular desde USD")
+        chosen = menu.exec(self.table.viewport().mapToGlobal(pos))
+        if chosen == action:
+            setattr(product, attr, None)
+            self._update_price_columns()
 
     def _set_override(self, product: Product, attr: str, text: str) -> None:
         cleaned = text.replace("$", "").replace(".", "").strip()
