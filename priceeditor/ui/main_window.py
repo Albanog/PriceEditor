@@ -153,6 +153,9 @@ class MainWindow(QMainWindow):
 
         row.addStretch()
 
+        self.checked_count_label = QLabel("0 productos seleccionados")
+        row.addWidget(self.checked_count_label)
+
         btn_generate = QPushButton("Generar PDF")
         btn_generate.clicked.connect(self.on_generate_pdf)
         row.addWidget(btn_generate)
@@ -369,6 +372,12 @@ class MainWindow(QMainWindow):
         except (TypeError, RuntimeError):
             pass
         self.table.itemChanged.connect(self._on_item_changed)
+        self._update_checked_count()
+
+    def _update_checked_count(self) -> None:
+        count = sum(1 for p in self.products if p.checked and not p.deleted)
+        label = "producto" if count == 1 else "productos"
+        self.checked_count_label.setText(f"{count} {label} seleccionados")
 
     def _position_header_checkbox(self) -> None:
         header = self.table.horizontalHeader()
@@ -407,6 +416,7 @@ class MainWindow(QMainWindow):
 
     def _on_check_changed(self, product: Product, state: int) -> None:
         product.checked = state == 2  # Qt.CheckState.Checked
+        self._update_checked_count()
 
     def _on_toggle_delete(self, product: Product) -> None:
         product.deleted = not product.deleted
