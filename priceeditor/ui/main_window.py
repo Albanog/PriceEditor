@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+import webbrowser
+
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,11 +25,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import __version__
 from ..core.excel_import import import_excel, merge_import
 from ..core.models import GlobalSettings, Product
 from ..core.pdf_generator import fmt_ars, generate_pdf
 from ..core.pricing import compute_prices
 from ..core.project_io import load_project, save_project
+from ..core.update_check import check_for_update
+
+
+class _UpdateCheckThread(QThread):
+    found = Signal(str, str)
+
+    def run(self) -> None:
+        result = check_for_update()
+        if result:
+            self.found.emit(*result)
 
 COL_CHECK = 0
 COL_NAME = 1
@@ -55,6 +68,25 @@ class MainWindow(QMainWindow):
         self.current_project_path: str | None = None
 
         self._build_ui()
+        self._start_update_check()
+
+    def _start_update_check(self) -> None:
+        self._update_thread = _UpdateCheckThread(self)
+        self._update_thread.found.connect(self._on_update_found)
+        self._update_thread.start()
+
+    def _on_update_found(self, latest_version: str, html_url: str) -> None:
+        box = QMessageBox(self)
+        box.setWindowTitle("Update available")
+        box.setText(
+            f"A newer version is available: {latest_version} "
+            f"(you have {__version__})."
+        )
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        open_button = box.addButton("Download", QMessageBox.ButtonRole.ActionRole)
+        box.exec()
+        if box.clickedButton() is open_button:
+            webbrowser.open(html_url)
 
     # ---------- UI construction ----------
 
