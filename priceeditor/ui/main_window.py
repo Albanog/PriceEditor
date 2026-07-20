@@ -3,7 +3,7 @@ from __future__ import annotations
 import webbrowser
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -127,29 +127,35 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self) -> QHBoxLayout:
         row = QHBoxLayout()
 
-        btn_new = QPushButton("Nuevo proyecto")
-        btn_new.clicked.connect(self.on_new_project)
-        row.addWidget(btn_new)
+        btn_archivo = QPushButton("Archivo")
+        archivo_menu = QMenu(btn_archivo)
 
-        btn_import = QPushButton("Importar Excel")
-        btn_import.clicked.connect(self.on_import_excel)
-        row.addWidget(btn_import)
+        action_new = QAction("Nuevo proyecto", self)
+        action_new.triggered.connect(self.on_new_project)
+        archivo_menu.addAction(action_new)
+
+        action_open = QAction("Abrir proyecto", self)
+        action_open.triggered.connect(self.on_open_project)
+        archivo_menu.addAction(action_open)
+
+        action_save = QAction("Guardar proyecto", self)
+        action_save.triggered.connect(self.on_save_project)
+        archivo_menu.addAction(action_save)
+
+        action_save_as = QAction("Guardar como...", self)
+        action_save_as.triggered.connect(self.on_save_project_as)
+        archivo_menu.addAction(action_save_as)
+
+        action_import = QAction("Importar Excel", self)
+        action_import.triggered.connect(self.on_import_excel)
+        archivo_menu.addAction(action_import)
+
+        btn_archivo.setMenu(archivo_menu)
+        row.addWidget(btn_archivo)
 
         btn_add = QPushButton("Agregar producto")
         btn_add.clicked.connect(self.on_add_product)
         row.addWidget(btn_add)
-
-        btn_open = QPushButton("Abrir proyecto")
-        btn_open.clicked.connect(self.on_open_project)
-        row.addWidget(btn_open)
-
-        btn_save = QPushButton("Guardar proyecto")
-        btn_save.clicked.connect(self.on_save_project)
-        row.addWidget(btn_save)
-
-        btn_save_as = QPushButton("Guardar como...")
-        btn_save_as.clicked.connect(self.on_save_project_as)
-        row.addWidget(btn_save_as)
 
         row.addStretch()
 
@@ -223,7 +229,13 @@ class MainWindow(QMainWindow):
     def on_set_all_checked(self, checked: bool) -> None:
         for p in self._visible_products():
             p.checked = checked
-        self.refresh_table()
+        for row in range(self.table.rowCount()):
+            chk = self.table.cellWidget(row, COL_CHECK)
+            if chk is not None:
+                chk.blockSignals(True)
+                chk.setChecked(checked)
+                chk.blockSignals(False)
+        self._update_checked_count()
 
     # ---------- import / project ----------
 
@@ -255,9 +267,17 @@ class MainWindow(QMainWindow):
         self.refresh_table()
 
     def on_add_product(self) -> None:
-        self.products.append(Product(name="Nuevo producto", usd_price=0.0))
-        self.show_deleted_chk.setChecked(False)
-        self.refresh_table()
+        product = Product(name="Nuevo producto", usd_price=0.0)
+        self.products.append(product)
+        if self.show_deleted_chk.isChecked():
+            self.show_deleted_chk.blockSignals(True)
+            self.show_deleted_chk.setChecked(False)
+            self.show_deleted_chk.blockSignals(False)
+        if self.filter_edit.text().strip():
+            self.filter_edit.clear()
+        row_idx = self.table.rowCount()
+        self.table.insertRow(row_idx)
+        self._populate_row(row_idx, product)
         self.table.scrollToBottom()
 
     def on_open_project(self) -> None:
@@ -329,42 +349,7 @@ class MainWindow(QMainWindow):
         self.header_check_all.blockSignals(False)
 
         for row_idx, product in enumerate(visible):
-            chk = QCheckBox()
-            chk.setChecked(product.checked)
-            chk.stateChanged.connect(lambda state, p=product: self._on_check_changed(p, state))
-            self.table.setCellWidget(row_idx, COL_CHECK, chk)
-
-            name_item = QTableWidgetItem(product.name)
-            self.table.setItem(row_idx, COL_NAME, name_item)
-
-            usd_item = QTableWidgetItem(f"{product.usd_price:.2f}")
-            self.table.setItem(row_idx, COL_USD, usd_item)
-
-            cuotas_n_item = QTableWidgetItem(
-                str(product.cuotas_count) if product.cuotas_count is not None else ""
-            )
-            self.table.setItem(row_idx, COL_CUOTAS_N, cuotas_n_item)
-
-            tipo_item = QTableWidgetItem(product.tipo_cobro_text or "")
-            self.table.setItem(row_idx, COL_TIPO_COBRO, tipo_item)
-
-            contado, cuota, _n = compute_prices(product, self.settings)
-            contado_item = QTableWidgetItem(fmt_ars(contado))
-            self._style_contado_item(contado_item, product, contado)
-            self.table.setItem(row_idx, COL_CONTADO, contado_item)
-
-            cuota_item = QTableWidgetItem(fmt_ars(cuota))
-            if product.override_cuota_ars is not None:
-                cuota_item.setBackground(Qt.yellow)
-                cuota_item.setForeground(Qt.black)
-            self.table.setItem(row_idx, COL_CUOTA, cuota_item)
-
-            copies_item = QTableWidgetItem(str(product.copies))
-            self.table.setItem(row_idx, COL_COPIES, copies_item)
-
-            btn = QPushButton("Restaurar" if product.deleted else "Eliminar")
-            btn.clicked.connect(lambda _, p=product: self._on_toggle_delete(p))
-            self.table.setCellWidget(row_idx, COL_DELETE, btn)
+            self._populate_row(row_idx, product)
 
         self.table.blockSignals(False)
         try:
@@ -373,6 +358,45 @@ class MainWindow(QMainWindow):
             pass
         self.table.itemChanged.connect(self._on_item_changed)
         self._update_checked_count()
+
+    def _populate_row(self, row_idx: int, product: Product) -> None:
+        chk = QCheckBox()
+        chk.setChecked(product.checked)
+        chk.stateChanged.connect(lambda state, p=product: self._on_check_changed(p, state))
+        self.table.setCellWidget(row_idx, COL_CHECK, chk)
+
+        name_item = QTableWidgetItem(product.name)
+        self.table.setItem(row_idx, COL_NAME, name_item)
+
+        usd_item = QTableWidgetItem(f"{product.usd_price:.2f}")
+        self.table.setItem(row_idx, COL_USD, usd_item)
+
+        cuotas_n_item = QTableWidgetItem(
+            str(product.cuotas_count) if product.cuotas_count is not None else ""
+        )
+        self.table.setItem(row_idx, COL_CUOTAS_N, cuotas_n_item)
+
+        tipo_item = QTableWidgetItem(product.tipo_cobro_text or "")
+        self.table.setItem(row_idx, COL_TIPO_COBRO, tipo_item)
+
+        contado, cuota, _n = compute_prices(product, self.settings)
+        contado_item = QTableWidgetItem(fmt_ars(contado))
+        self._style_contado_item(contado_item, product, contado)
+        self.table.setItem(row_idx, COL_CONTADO, contado_item)
+
+        cuota_item = QTableWidgetItem(fmt_ars(cuota))
+        if product.override_cuota_ars is not None:
+            cuota_item.setBackground(Qt.yellow)
+            cuota_item.setForeground(Qt.black)
+        self.table.setItem(row_idx, COL_CUOTA, cuota_item)
+
+        copies_item = QTableWidgetItem(str(product.copies))
+        self.table.setItem(row_idx, COL_COPIES, copies_item)
+
+        btn = QPushButton("Restaurar" if product.deleted else "Eliminar")
+        btn.setProperty("product_id", id(product))
+        btn.clicked.connect(lambda _, p=product: self._on_toggle_delete(p))
+        self.table.setCellWidget(row_idx, COL_DELETE, btn)
 
     def _update_checked_count(self) -> None:
         count = sum(1 for p in self.products if p.checked and not p.deleted)
@@ -392,12 +416,22 @@ class MainWindow(QMainWindow):
         checked = state == 2  # Qt.CheckState.Checked
         for p in self._visible_products():
             p.checked = checked
-        self.refresh_table()
+        for row in range(self.table.rowCount()):
+            chk = self.table.cellWidget(row, COL_CHECK)
+            if chk is not None:
+                chk.blockSignals(True)
+                chk.setChecked(checked)
+                chk.blockSignals(False)
+        self._update_checked_count()
 
-    def _update_price_columns(self) -> None:
+    def _update_price_columns(self, rows: list[int] | None = None) -> None:
         self.table.blockSignals(True)
         visible = self._visible_products()
-        for row_idx, product in enumerate(visible):
+        row_range = rows if rows is not None else range(len(visible))
+        for row_idx in row_range:
+            if row_idx >= len(visible):
+                continue
+            product = visible[row_idx]
             contado, cuota, _n = compute_prices(product, self.settings)
 
             contado_item = self.table.item(row_idx, COL_CONTADO)
@@ -418,9 +452,25 @@ class MainWindow(QMainWindow):
         product.checked = state == 2  # Qt.CheckState.Checked
         self._update_checked_count()
 
+    def _find_row_for_product(self, product: Product) -> int | None:
+        for row in range(self.table.rowCount()):
+            btn = self.table.cellWidget(row, COL_DELETE)
+            if btn is not None and btn.property("product_id") == id(product):
+                return row
+        return None
+
     def _on_toggle_delete(self, product: Product) -> None:
         product.deleted = not product.deleted
-        self.refresh_table()
+        row_idx = self._find_row_for_product(product)
+        if row_idx is None:
+            return
+        if self.show_deleted_chk.isChecked():
+            self.table.blockSignals(True)
+            self._populate_row(row_idx, product)
+            self.table.blockSignals(False)
+        else:
+            self.table.removeRow(row_idx)
+        self._update_checked_count()
 
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
         row = item.row()
@@ -458,7 +508,7 @@ class MainWindow(QMainWindow):
             except ValueError:
                 pass
 
-        self._update_price_columns()
+        self._update_price_columns(rows=[row])
 
     def _style_contado_item(self, item: QTableWidgetItem, product: Product, contado: int) -> None:
         cost = product.usd_price * self.settings.exchange_rate

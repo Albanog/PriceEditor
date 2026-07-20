@@ -45,16 +45,21 @@ def _compute_block(product: Product, settings: GlobalSettings, inner_w: float) -
     contado, cuota, n_cuotas = compute_prices(product, settings)
 
     name = product.name.upper()
-    name_size = 13
-    while name_size > 8:
+    name_size = 9
+    while name_size > 6:
         name_lines = wrap_text(name, FONT_NAME_BOLD, name_size, inner_w)
         if len(name_lines) <= 3:
             break
         name_size -= 1
     name_lines = wrap_text(name, FONT_NAME_BOLD, name_size, inner_w)
 
+    contado_text = f"Contado {fmt_ars(contado)}"
+    contado_size = 26
+    while contado_size > 14 and stringWidth(contado_text, FONT_NAME_BOLD, contado_size) > inner_w:
+        contado_size -= 1
+
     if product.tipo_cobro_text:
-        cuotas_lines = wrap_text(product.tipo_cobro_text, FONT_NAME_REGULAR, 10, inner_w)
+        cuotas_lines = wrap_text(product.tipo_cobro_text, FONT_NAME_REGULAR, 13, inner_w)
     elif n_cuotas and n_cuotas > 0:
         cuotas_lines = [f"{n_cuotas} Cuotas de {fmt_ars(cuota)}"]
     else:
@@ -62,13 +67,14 @@ def _compute_block(product: Product, settings: GlobalSettings, inner_w: float) -
 
     block_h = len(name_lines) * name_size * 1.15
     block_h += 3 * mm
-    block_h += 12 * 1.3
-    block_h += len(cuotas_lines) * 10 * 1.2
+    block_h += contado_size * 1.3
+    block_h += len(cuotas_lines) * 13 * 1.2
 
     return {
         "contado": contado,
         "name_lines": name_lines,
         "name_size": name_size,
+        "contado_size": contado_size,
         "cuotas_lines": cuotas_lines,
         "block_h": block_h,
     }
@@ -123,11 +129,12 @@ def _draw_sign(c: canvas.Canvas, block: dict, x: float, y: float, w: float, h: f
 
     cur_y -= 3 * mm
 
-    c.setFont(FONT_NAME_BOLD, 12)
+    contado_size = block["contado_size"]
+    c.setFont(FONT_NAME_BOLD, contado_size)
     c.drawCentredString(cx, cur_y, f"Contado {fmt_ars(block['contado'])}")
-    cur_y -= 12 * 1.3
+    cur_y -= contado_size * 1.3
 
-    c.setFont(FONT_NAME_REGULAR, 10)
+    c.setFont(FONT_NAME_REGULAR, 13)
     for line in block["cuotas_lines"]:
         c.drawCentredString(cx, cur_y, line)
-        cur_y -= 10 * 1.2
+        cur_y -= 13 * 1.2
