@@ -8,6 +8,7 @@ from typing import Optional
 class Product:
     name: str
     usd_price: float
+    codigo: Optional[str] = None
     checked: bool = True
     deleted: bool = False
     cuotas_count: Optional[int] = None  # None -> use global default
@@ -20,6 +21,7 @@ class Product:
         return {
             "name": self.name,
             "usd_price": self.usd_price,
+            "codigo": self.codigo,
             "checked": self.checked,
             "deleted": self.deleted,
             "cuotas_count": self.cuotas_count,
@@ -34,6 +36,7 @@ class Product:
         return Product(
             name=d["name"],
             usd_price=d["usd_price"],
+            codigo=d.get("codigo"),
             checked=d.get("checked", True),
             deleted=d.get("deleted", False),
             cuotas_count=d.get("cuotas_count"),

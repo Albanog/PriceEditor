@@ -44,15 +44,16 @@ class _UpdateCheckThread(QThread):
 
 COL_CHECK = 0
 COL_NAME = 1
-COL_USD = 2
-COL_CUOTAS_N = 3
-COL_TIPO_COBRO = 4
-COL_CONTADO = 5
-COL_CUOTA = 6
-COL_COPIES = 7
-COL_DELETE = 8
+COL_CODIGO = 2
+COL_USD = 3
+COL_CUOTAS_N = 4
+COL_TIPO_COBRO = 5
+COL_CONTADO = 6
+COL_CUOTA = 7
+COL_COPIES = 8
+COL_DELETE = 9
 COLUMNS = [
-    "", "Producto", "USD", "N Cuotas", "Tipo de cobro (opcional)",
+    "", "Producto", "Codigo", "USD", "N Cuotas", "Tipo de cobro (opcional)",
     "Contado ARS", "Cuota ARS", "Copias", "",
 ]
 
@@ -208,7 +209,7 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.addWidget(QLabel("Filtrar:"))
         self.filter_edit = QLineEdit()
-        self.filter_edit.setPlaceholderText("Buscar producto")
+        self.filter_edit.setPlaceholderText("Buscar producto o codigo")
         self.filter_timer = QTimer(self)
         self.filter_timer.setSingleShot(True)
         self.filter_timer.setInterval(250)
@@ -336,7 +337,13 @@ class MainWindow(QMainWindow):
         ]
         words = self.filter_edit.text().lower().split()
         if words:
-            products = [p for p in products if all(w in p.name.lower() for w in words)]
+            products = [
+                p for p in products
+                if all(
+                    w in p.name.lower() or w in (p.codigo or "").lower()
+                    for w in words
+                )
+            ]
         return products
 
     def refresh_table(self) -> None:
@@ -367,6 +374,9 @@ class MainWindow(QMainWindow):
 
         name_item = QTableWidgetItem(product.name)
         self.table.setItem(row_idx, COL_NAME, name_item)
+
+        codigo_item = QTableWidgetItem(product.codigo or "")
+        self.table.setItem(row_idx, COL_CODIGO, codigo_item)
 
         usd_item = QTableWidgetItem(f"{product.usd_price:.2f}")
         self.table.setItem(row_idx, COL_USD, usd_item)
@@ -483,6 +493,8 @@ class MainWindow(QMainWindow):
 
         if col == COL_NAME:
             product.name = text
+        elif col == COL_CODIGO:
+            product.codigo = text or None
         elif col == COL_USD:
             try:
                 product.usd_price = float(text.replace(",", "."))
