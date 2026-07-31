@@ -148,6 +148,9 @@ class MainWindow(QMainWindow):
         archivo_menu.addAction(action_save_as)
 
         action_import = QAction("Importar Excel", self)
+        action_import.setToolTip(
+            "Orden de columnas esperado: 1) Nombre, 2) Precio USD, 3) Codigo (opcional)"
+        )
         action_import.triggered.connect(self.on_import_excel)
         archivo_menu.addAction(action_import)
 
@@ -241,7 +244,12 @@ class MainWindow(QMainWindow):
     # ---------- import / project ----------
 
     def on_import_excel(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Importar Excel", "", "Excel (*.xlsx *.xls)")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Importar Excel (columnas: 1-Nombre, 2-Precio USD, 3-Codigo opcional)",
+            "",
+            "Excel (*.xlsx *.xls)",
+        )
         if not path:
             return
         try:
@@ -409,9 +417,13 @@ class MainWindow(QMainWindow):
         self.table.setCellWidget(row_idx, COL_DELETE, btn)
 
     def _update_checked_count(self) -> None:
-        count = sum(1 for p in self.products if p.checked and not p.deleted)
+        checked = [p for p in self.products if p.checked and not p.deleted]
+        count = len(checked)
         label = "producto" if count == 1 else "productos"
-        self.checked_count_label.setText(f"{count} {label} seleccionados")
+        total_copies = sum(p.copies for p in checked)
+        self.checked_count_label.setText(
+            f"{count} {label} seleccionados ({total_copies} copias)"
+        )
 
     def _position_header_checkbox(self) -> None:
         header = self.table.horizontalHeader()
@@ -519,6 +531,7 @@ class MainWindow(QMainWindow):
                 product.copies = max(1, int(text))
             except ValueError:
                 pass
+            self._update_checked_count()
 
         self._update_price_columns(rows=[row])
 
