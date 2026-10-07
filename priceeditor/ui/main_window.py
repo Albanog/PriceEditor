@@ -108,6 +108,7 @@ class MainWindow(QMainWindow):
         self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
+        self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table)
 
         self.header_check_all = QCheckBox(self.table.horizontalHeader())
@@ -230,17 +231,6 @@ class MainWindow(QMainWindow):
         self.settings.rounding_step = self.rounding_spin.value()
         self._update_price_columns()
 
-    def on_set_all_checked(self, checked: bool) -> None:
-        for p in self._visible_products():
-            p.checked = checked
-        for row in range(self.table.rowCount()):
-            chk = self.table.cellWidget(row, COL_CHECK)
-            if chk is not None:
-                chk.blockSignals(True)
-                chk.setChecked(checked)
-                chk.blockSignals(False)
-        self._update_checked_count()
-
     # ---------- import / project ----------
 
     def on_import_excel(self) -> None:
@@ -285,9 +275,12 @@ class MainWindow(QMainWindow):
         if self.filter_edit.text().strip():
             self.filter_edit.clear()
         row_idx = self.table.rowCount()
+        self.table.blockSignals(True)
         self.table.insertRow(row_idx)
         self._populate_row(row_idx, product)
+        self.table.blockSignals(False)
         self.table.scrollToBottom()
+        self._update_checked_count()
 
     def on_open_project(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Abrir proyecto", "", "PriceEditor (*.pep.json)")
@@ -367,11 +360,6 @@ class MainWindow(QMainWindow):
             self._populate_row(row_idx, product)
 
         self.table.blockSignals(False)
-        try:
-            self.table.itemChanged.disconnect(self._on_item_changed)
-        except (TypeError, RuntimeError):
-            pass
-        self.table.itemChanged.connect(self._on_item_changed)
         self._update_checked_count()
 
     def _populate_row(self, row_idx: int, product: Product) -> None:
@@ -403,9 +391,7 @@ class MainWindow(QMainWindow):
         self.table.setItem(row_idx, COL_CONTADO, contado_item)
 
         cuota_item = QTableWidgetItem(fmt_ars(cuota))
-        if product.override_cuota_ars is not None:
-            cuota_item.setBackground(Qt.yellow)
-            cuota_item.setForeground(Qt.black)
+        self._set_cuota_item_style(cuota_item, product)
         self.table.setItem(row_idx, COL_CUOTA, cuota_item)
 
         copies_item = QTableWidgetItem(str(product.copies))
@@ -446,6 +432,13 @@ class MainWindow(QMainWindow):
                 chk.blockSignals(False)
         self._update_checked_count()
 
+    def _set_cuota_item_style(self, item: QTableWidgetItem, product: Product) -> None:
+        if product.override_cuota_ars is not None:
+            item.setBackground(Qt.yellow)
+        else:
+            item.setBackground(Qt.white)
+        item.setForeground(Qt.black)
+
     def _update_price_columns(self, rows: list[int] | None = None) -> None:
         self.table.blockSignals(True)
         visible = self._visible_products()
@@ -462,12 +455,7 @@ class MainWindow(QMainWindow):
 
             cuota_item = self.table.item(row_idx, COL_CUOTA)
             cuota_item.setText(fmt_ars(cuota))
-            if product.override_cuota_ars is not None:
-                cuota_item.setBackground(Qt.yellow)
-                cuota_item.setForeground(Qt.black)
-            else:
-                cuota_item.setBackground(Qt.white)
-                cuota_item.setForeground(Qt.black)
+            self._set_cuota_item_style(cuota_item, product)
         self.table.blockSignals(False)
 
     def _on_check_changed(self, product: Product, state: int) -> None:
