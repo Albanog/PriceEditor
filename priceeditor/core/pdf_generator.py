@@ -20,8 +20,19 @@ FONT_NAME_BOLD = "Helvetica-Bold"
 FONT_NAME_REGULAR = "Helvetica"
 
 
+TC_FONT_SIZE = 6.5
+TC_OFFSET = 2.5 * mm  # distance from inner border to TC text baseline
+
+
 def fmt_ars(value: int) -> str:
     return f"${value:,.0f}".replace(",", ".")
+
+
+def fmt_rate(value: float) -> str:
+    """Argentine format: thousands '.', decimals ',' (decimals only if non-zero)."""
+    if abs(value - round(value)) < 0.005:
+        return f"${value:,.0f}".replace(",", ".")
+    return f"${value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def wrap_text(text: str, font: str, size: int, max_width: float) -> list[str]:
@@ -65,8 +76,12 @@ def _compute_block(product: Product, settings: GlobalSettings, inner_w: float) -
     else:
         cuotas_lines = []
 
+    # distance from last name baseline to contado baseline: name descent + gap +
+    # contado cap height, so large contado text never overlaps the name
+    name_to_contado = name_size * 0.25 + 3 * mm + contado_size * 0.75
+
     block_h = len(name_lines) * name_size * 1.15
-    block_h += 3 * mm
+    block_h += name_to_contado - name_size * 1.15
     block_h += contado_size * 1.3
     block_h += len(cuotas_lines) * 13 * 1.2
 
@@ -76,7 +91,9 @@ def _compute_block(product: Product, settings: GlobalSettings, inner_w: float) -
         "name_size": name_size,
         "contado_size": contado_size,
         "cuotas_lines": cuotas_lines,
+        "name_to_contado": name_to_contado,
         "block_h": block_h,
+        "tc_text": f"TC USD {fmt_rate(settings.exchange_rate)}" if product.show_tc else None,
     }
 
 
@@ -123,11 +140,12 @@ def _draw_sign(c: canvas.Canvas, block: dict, x: float, y: float, w: float, h: f
     cur_y = y + h - PAD_V - name_size
 
     c.setFont(FONT_NAME_BOLD, name_size)
-    for line in block["name_lines"]:
+    for i, line in enumerate(block["name_lines"]):
+        if i:
+            cur_y -= name_size * 1.15
         c.drawCentredString(cx, cur_y, line)
-        cur_y -= name_size * 1.15
 
-    cur_y -= 3 * mm
+    cur_y -= block["name_to_contado"]
 
     contado_size = block["contado_size"]
     c.setFont(FONT_NAME_BOLD, contado_size)
@@ -138,3 +156,8 @@ def _draw_sign(c: canvas.Canvas, block: dict, x: float, y: float, w: float, h: f
     for line in block["cuotas_lines"]:
         c.drawCentredString(cx, cur_y, line)
         cur_y -= 13 * 1.2
+
+    # exchange rate reference, small at the bottom (fits inside bottom padding)
+    if block["tc_text"]:
+        c.setFont(FONT_NAME_REGULAR, TC_FONT_SIZE)
+        c.drawCentredString(cx, y + gap + TC_OFFSET, block["tc_text"])

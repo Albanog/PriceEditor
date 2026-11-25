@@ -51,10 +51,11 @@ COL_TIPO_COBRO = 5
 COL_CONTADO = 6
 COL_CUOTA = 7
 COL_COPIES = 8
-COL_DELETE = 9
+COL_TC = 9
+COL_DELETE = 10
 COLUMNS = [
     "", "Producto", "Codigo", "USD", "N Cuotas", "Tipo de cobro (opcional)",
-    "Contado ARS", "Cuota ARS", "Copias", "",
+    "Contado ARS", "Cuota ARS", "Copias", "Con TC", "",
 ]
 
 
@@ -62,7 +63,8 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("PriceEditor")
-        self.resize(1200, 700)
+        avail = self.screen().availableGeometry()
+        self.resize(min(1600, avail.width() - 40), min(750, avail.height() - 60))
 
         self.products: list[Product] = []
         self.settings = GlobalSettings()
@@ -105,6 +107,10 @@ class MainWindow(QMainWindow):
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.setColumnWidth(COL_NAME, 260)
         self.table.setColumnWidth(COL_TIPO_COBRO, 220)
+        self.table.setColumnWidth(COL_TC, 70)
+        self.table.horizontalHeaderItem(COL_TC).setToolTip(
+            "Imprimir la cotizacion del dolar (TC) abajo del cartel"
+        )
         self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
@@ -396,6 +402,16 @@ class MainWindow(QMainWindow):
 
         copies_item = QTableWidgetItem(str(product.copies))
         self.table.setItem(row_idx, COL_COPIES, copies_item)
+
+        tc_chk = QCheckBox()
+        tc_chk.setChecked(product.show_tc)
+        tc_chk.toggled.connect(lambda checked, p=product: setattr(p, "show_tc", checked))
+        tc_cell = QWidget()
+        tc_layout = QHBoxLayout(tc_cell)
+        tc_layout.setContentsMargins(0, 0, 0, 0)
+        tc_layout.setAlignment(Qt.AlignCenter)
+        tc_layout.addWidget(tc_chk)
+        self.table.setCellWidget(row_idx, COL_TC, tc_cell)
 
         btn = QPushButton("Restaurar" if product.deleted else "Eliminar")
         btn.setProperty("product_id", id(product))

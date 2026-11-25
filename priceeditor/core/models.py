@@ -16,6 +16,7 @@ class Product:
     override_contado_ars: Optional[float] = None
     override_cuota_ars: Optional[float] = None
     copies: int = 1
+    show_tc: bool = True  # print exchange rate reference on the sign
 
     def to_dict(self) -> dict:
         return {
@@ -29,6 +30,7 @@ class Product:
             "override_contado_ars": self.override_contado_ars,
             "override_cuota_ars": self.override_cuota_ars,
             "copies": self.copies,
+            "show_tc": self.show_tc,
         }
 
     @staticmethod
@@ -44,6 +46,7 @@ class Product:
             override_contado_ars=d.get("override_contado_ars"),
             override_cuota_ars=d.get("override_cuota_ars"),
             copies=d.get("copies", 1),
+            show_tc=d.get("show_tc", True),
         )
 
 
