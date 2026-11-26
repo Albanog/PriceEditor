@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import webbrowser
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction, QColor
+from PySide6.QtCore import Qt, QThread, QTimer, QUrl, Signal
+from PySide6.QtGui import QAction, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -599,7 +599,22 @@ class MainWindow(QMainWindow):
             return
         try:
             generate_pdf(self.products, self.settings, path)
+        except PermissionError:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"No se pudo guardar el PDF porque el archivo está abierto en otro programa:\n{path}\n\n"
+                "Cerralo (por ejemplo, el visor de PDF) o guardá con otro nombre.",
+            )
+            return
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo generar el PDF:\n{e}")
             return
-        QMessageBox.information(self, "Listo", f"PDF generado:\n{path}")
+        box = QMessageBox(QMessageBox.Information, "Listo", f"PDF generado:\n{path}", parent=self)
+        open_btn = box.addButton("Abrir PDF", QMessageBox.AcceptRole)
+        box.addButton("Cerrar", QMessageBox.RejectRole)
+        box.setDefaultButton(open_btn)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+                QMessageBox.warning(self, "Error", f"No se pudo abrir el PDF:\n{path}")
